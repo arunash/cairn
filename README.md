@@ -26,6 +26,10 @@ Then open the folder in **Claude Code** and just ask: *"what should I do about m
 
 You need nothing but a Robinhood login for the report. For the chat you need [Claude Code](https://claude.com/claude-code) (it's the brain). Everything runs locally.
 
+> **Where does it open?** `web/report.html` is a plain file on your machine — `open` it and it loads from a `file://` path in your browser. There is no hosted portal and no server.
+
+> **Status — built in the open.** Working today: the report (account value, unrealized P&L, concentration, per-position cost basis) and the intent **ledger** (pool split, day-over-day, options premium). On the roadmap: realized long/short-term gains, wash-sale flags, and statement-based cash-flows. Issues and PRs welcome.
+
 ---
 
 ## The three layers — all free, all local
@@ -43,20 +47,19 @@ The safety line is *structural*: layers 1–2 only ever have **read** tools, so 
 ```
    CLAUDE CODE  (the brain, local)            YOUR ROBINHOOD  (your account)
    ┌───────────────────────────┐   read       ┌────────────────────────────┐
-   │ skills/  insights·ask·act  │ ───────────► │  positions · quotes        │
-   │ CLAUDE.md = rules+guards   │ ◄─────────── │  trade & options history   │
-   │ config/ledger.json = YOU   │   write*     │  monthly statements (PDF)  │
+   │ CLAUDE.md = rules+guards   │ ───────────► │  positions · quotes        │
+   │ config/ledger.json = YOU   │ ◄─────────── │  trade & options history   │
+   │ broker/mcp.py = the gate   │   write*     │  monthly statements (PDF)  │
    └───────────────────────────┘  *Act only    └────────────────────────────┘
               │  runs
               ▼
-   cairn/  ingest ──► compute ──► report ──► web/report.html
-           (3 sources)  (the insight modules)   (the page you read)
-           watch/  daily refresh + alerts (concentration-trim watcher, earnings, etc.)
+   cairn/  report ──► web/report.html          python -m cairn report
+           compute/ledger · act/* · watch/*    ledger · wheel · roll · trim · alerts
 ```
 
-- **Ingest** pulls from all three Robinhood surfaces + live quotes.
-- **Compute** runs the deterministic modules: concentration, cost-basis & holding period, realized LT/ST gains, premium (net of buy-to-closes), wash-sale, and the intent ledger.
-- **Report** renders it. **Claude Code** reads it, answers questions, and — only in Act mode — executes with your approval.
+- **Report** (`python -m cairn report`) pulls your live holdings read-only and renders the page — account value, unrealized P&L, concentration, and per-position cost basis & weight.
+- **Compute** holds the deterministic engines; today that's the intent **ledger** (`cairn/compute/ledger.py`): pool split, day-over-day, and options premium net of buy-to-closes. Realized LT/ST gains and wash-sale flags are the roadmap.
+- **Claude Code** reads the report, answers questions in plain language, and — only in Act mode — executes with your approval.
 
 ## Security
 
@@ -70,23 +73,35 @@ The safety line is *structural*: layers 1–2 only ever have **read** tools, so 
 
 ```
 cairn/
-├── CLAUDE.md              # the agent's behavior, YOUR rules, the hard guardrails
-├── .mcp.json             # Robinhood MCP (read tools always; write gated to Act)
+├── CLAUDE.md                 # the agent's behavior, YOUR rules, the hard guardrails
+├── SECURITY.md               # read-only-by-default model + secret handling
+├── .mcp.json                 # Robinhood MCP wiring (read tools always; write gated to Act)
 ├── config/
 │   └── ledger.example.json   # intent-based pools + your rules (copy → ledger.json)
 ├── cairn/
-│   ├── ingest/           # positions · history · statements (PDF parse)
-│   ├── compute/          # concentration · costbasis · realized · premium · washsale · ledger
-│   ├── report/           # build the report
-│   ├── act/              # wheel · roll · reinvest · trim  (human-in-loop)
-│   └── watch/            # daily refresh + condition alerts
-├── skills/               # Claude Code playbooks: insights · ask · act · steward
-└── web/report.html       # the insights front page
+│   ├── broker/mcp.py         # the MCP gate — write tools registered only when CAIRN_ACT_ENABLED=1
+│   ├── report/build.py       # builds web/report.html (the insights page)
+│   ├── compute/ledger.py     # intent ledger · day-over-day · premium split
+│   ├── ingest/statements.py  # monthly statement PDF → ACH cash-flow parse
+│   ├── act/                  # wheel · roll · reinvest · trim  (human-in-loop)
+│   └── watch/                # trim watcher · reminders (email alerts)
+└── web/report.html           # generated locally — your insights page (git-ignored)
 ```
 
-## ⚠️ Before you publish a fork
+## Keeping your fork clean
 
-The `cairn/` modules are ported from a working prototype and contain **account-specific values** (account IDs, a cost basis or two). Move those into `config/ledger.json` (git-ignored) before making your fork public. See [`docs/PUBLISH.md`](docs/PUBLISH.md).
+Your personal data never belongs in the repo. Account IDs, cost basis, credentials, and
+generated output all live in **git-ignored** files only:
+
+| File | What | Where it comes from |
+|------|------|---------------------|
+| `.env` | your Robinhood login | copy `.env.example` |
+| `config/ledger.json` | your accounts & pools | copy `config/ledger.example.json` |
+| `web/report.html`, `config/daily-ledger.*` | generated output | created at runtime |
+
+The tracked `cairn/` modules ship with **placeholders only** — `MARGIN_ACCT`, `IRA_ACCT`,
+`<ticker>`, `BASIS = 0.0`. Put your real values into `config/ledger.json`, never into the code.
+Before you push, confirm `git status` shows none of the files above. See [`SECURITY.md`](SECURITY.md).
 
 ## License
 

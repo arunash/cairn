@@ -33,4 +33,4 @@ Read `config/ledger.json` — the intent-based pools (money grouped by *purpose*
 - Rolling a covered call: **buy-to-close before sell-to-open** (else "infinite risk" rejection).
 - Sub-accounts need `account_number=` on every read/write.
 
-See `skills/` for the full playbooks.
+See `cairn/act/` and `cairn/watch/` for the full playbooks.
