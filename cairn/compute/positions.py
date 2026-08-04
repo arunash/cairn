@@ -1,53 +1,91 @@
 #!/usr/bin/env python3
-"""Current positions, concentration, and per-symbol holding-period (long vs short-term) split."""
+"""Positions across ALL of the user's accounts, using Robinhood's authoritative per-position
+cost basis (already split- and transfer-adjusted), plus concentration and holding-period.
+
+Basis, quantity, value, and unrealized P&L come straight from Robinhood — correct even for
+split stocks (NVDA 10:1) and transferred-in shares (equity comp), with no reconstruction.
+The FIFO lot engine is used only to estimate the long- vs short-term split of each holding,
+anchored to Robinhood's real share count; where it can't reconcile, the position is flagged.
+"""
 import robin_stocks.robinhood as rh
-from cairn.compute.base import login
+from collections import defaultdict
+from cairn.compute.base import login, symbol_for, accounts
 from cairn.compute.lots import build
 
 
 def holdings():
-    """Live holdings with cost basis, unrealized P&L, and portfolio weight. Returns (rows, total_equity)."""
+    """Return (rows, total_equity, accounts). Rows are aggregated per symbol across accounts."""
     login()
-    h = rh.account.build_holdings() or {}
-    rows = []
-    for sym, d in h.items():
-        qty = float(d.get("quantity") or 0)
-        price = float(d.get("price") or 0)
-        basis = float(d.get("average_buy_price") or 0)
-        equity = float(d.get("equity") or qty * price)
-        cost = basis * qty
-        rows.append({
-            "sym": sym, "qty": qty, "price": price, "basis": basis, "equity": equity,
-            "cost": cost, "pl": equity - cost, "plpct": ((equity - cost) / cost * 100) if cost else 0.0,
-        })
-    rows.sort(key=lambda r: r["equity"], reverse=True)
-    total = sum(r["equity"] for r in rows)
-    for r in rows:
-        r["weight"] = (r["equity"] / total * 100) if total else 0.0
+    accts = accounts()
+    raw = {}
+    prices = {}
+    acct_equity = defaultdict(float)
 
-    # annotate each holding with how much of its share count is long-term (held > 1 year)
+    for a in accts:
+        an = a["number"]
+        for p in (rh.account.get_open_stock_positions(account_number=an) or []):
+            qty = float(p.get("quantity") or 0)
+            if qty <= 0:
+                continue
+            sym = symbol_for(p.get("instrument"))
+            if not sym:
+                continue
+            basis = float(p.get("average_buy_price") or 0)
+            if sym not in prices:
+                try:
+                    prices[sym] = float(rh.stocks.get_latest_price(sym)[0])
+                except Exception:
+                    prices[sym] = basis
+            price = prices[sym]
+            equity = qty * price
+            acct_equity[an] += equity
+            r = raw.setdefault(sym, {"qty": 0.0, "cost": 0.0, "equity": 0.0, "price": price, "accts": set()})
+            r["qty"] += qty
+            r["cost"] += basis * qty
+            r["equity"] += equity
+            r["accts"].add(an[-4:] if an else "????")
+
+    rows = []
+    for sym, r in raw.items():
+        qty, cost, equity = r["qty"], r["cost"], r["equity"]
+        rows.append({
+            "sym": sym, "qty": qty, "price": r["price"], "basis": (cost / qty if qty else 0.0),
+            "equity": equity, "cost": cost, "pl": equity - cost,
+            "plpct": ((equity - cost) / cost * 100) if cost else 0.0,
+            "accounts": sorted(r["accts"]),
+        })
+    rows.sort(key=lambda x: x["equity"], reverse=True)
+    total = sum(x["equity"] for x in rows)
+    for x in rows:
+        x["weight"] = (x["equity"] / total * 100) if total else 0.0
+
+    # holding-period split, anchored to Robinhood's real share count (scale-invariant proportion)
     _, open_lots = build()
-    lt_qty = {}
-    tot_qty = {}
+    by_sym = defaultdict(list)
     for lot in open_lots:
-        tot_qty[lot["sym"]] = tot_qty.get(lot["sym"], 0.0) + lot["qty"]
-        if lot["term"] == "LT":
-            lt_qty[lot["sym"]] = lt_qty.get(lot["sym"], 0.0) + lot["qty"]
-    for r in rows:
-        t = tot_qty.get(r["sym"], 0.0)
-        lt = lt_qty.get(r["sym"], 0.0)
-        if t <= 0:
-            r["term"] = "—"
-        elif lt >= t - 1e-9:
-            r["term"] = "LT"
-        elif lt <= 1e-9:
-            r["term"] = "ST"
+        by_sym[lot["sym"]].append(lot)
+    for x in rows:
+        lots = by_sym.get(x["sym"], [])
+        lot_tot = sum(l["qty"] for l in lots)
+        if lot_tot <= 0:
+            x["term"], x["recon_ok"] = "—", False
+            continue
+        lt_share = sum(l["qty"] for l in lots if l["term"] == "LT") / lot_tot
+        lt_qty = lt_share * x["qty"]
+        x["recon_ok"] = abs(lot_tot - x["qty"]) <= max(0.02 * x["qty"], 0.01)
+        if not x["recon_ok"]:
+            # lots don't reconcile (split / transfer / DRIP) → don't assert a possibly-wrong term
+            x["term"] = "—"
+        elif lt_qty >= x["qty"] - 1e-6:
+            x["term"] = "LT"
+        elif lt_qty <= 1e-6:
+            x["term"] = "ST"
         else:
-            r["term"] = f"{lt / t * 100:.0f}% LT"
-        # reconciliation: does the reconstructed lot quantity match Robinhood's current share count?
-        # a mismatch means a split / transfer-in / DRIP the FIFO engine can't see → basis is approximate.
-        r["recon_ok"] = (t > 0 and abs(t - r["qty"]) <= max(0.02 * r["qty"], 0.01))
-    return rows, total
+            x["term"] = f"{lt_share * 100:.0f}% LT"
+
+    for a in accts:
+        a["equity"] = round(acct_equity.get(a["number"], 0.0), 2)
+    return rows, total, accts
 
 
 def concentration(rows, total):

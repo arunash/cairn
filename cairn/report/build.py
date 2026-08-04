@@ -15,7 +15,6 @@ history (FIFO) — a decision aid, not tax advice. Reconcile against your 1099.
 import os
 import html
 import datetime
-import robin_stocks.robinhood as rh
 
 from cairn.compute.base import login, ROOT
 from cairn.compute import base, positions, realized, washsale, premium, cashflow
@@ -31,21 +30,14 @@ def _try(fn, default=None):
         return default
 
 
-def _cash():
-    try:
-        p = rh.profiles.load_account_profile() or {}
-        return float(p.get("portfolio_cash") or p.get("cash") or 0)
-    except Exception:
-        return 0.0
-
-
 def _collect():
     login()
-    rows, total = _try(positions.holdings, ([], 0.0))
+    rows, total, accts = _try(positions.holdings, ([], 0.0, []))
     return {
         "rows": rows,
         "total": total,
-        "cash": _cash(),
+        "accounts": accts,
+        "cash": sum(a.get("cash", 0.0) for a in accts),
         "conc": positions.concentration(rows, total) if rows else None,
         "realized": _try(realized.summary),
         "premium": _try(premium.summary),
@@ -81,8 +73,16 @@ def _render(d):
         _card("Cash", _money(cash)),
     ]
     if cf:
-        cards.append(_card("Net contributed", _money(cf["net_contributed"])))
+        cards.append(_card("Net deposits (ACH)", _money(cf["net_contributed"])))
     top = "".join(cards)
+
+    accts = d.get("accounts") or []
+    acct_html = ""
+    if len(accts) > 1:
+        chips = " · ".join(
+            f"…{(a.get('number') or '')[-4:]} <span style='color:var(--faint)'>{html.escape(a.get('type') or '')}</span> "
+            f"{_money(a.get('equity', 0) + a.get('cash', 0))}" for a in accts)
+        acct_html = f"<div class='band'>Across <b>{len(accts)} accounts</b> — {chips}</div>"
 
     conc_html = ""
     if d["conc"] and d["conc"]["top"]:
@@ -165,6 +165,7 @@ def _render(d):
   <h1>Your portfolio, on one page</h1>
   <div class="sub">Generated {d['ts']} · read-only · local file — nothing was uploaded</div>
   <div class="top">{top}</div>
+  {acct_html}
   {warn_html}
   {conc_html}
   {wash_html}
