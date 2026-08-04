@@ -28,7 +28,7 @@ You need nothing but a Robinhood login for the report. For the chat you need [Cl
 
 > **Where does it open?** `web/report.html` is a plain file on your machine — `open` it and it loads from a `file://` path in your browser. There is no hosted portal and no server.
 
-> **Status — built in the open.** Working today: the report (account value, unrealized P&L, concentration, per-position cost basis) and the intent **ledger** (pool split, day-over-day, options premium). On the roadmap: realized long/short-term gains, wash-sale flags, and statement-based cash-flows. Issues and PRs welcome.
+> **Status — built in the open.** The report is a full read of your account: value, cash, net contributed, every position with cost basis / unrealized P&L / holding period (LT vs ST), concentration (Herfindahl index), realized long- and short-term gains, options premium, dividends, and wash-sale candidates. All read-only and reconstructed from your own order history (`python -m cairn taxes` prints the tax view). Issues and PRs welcome.
 
 ---
 
@@ -54,11 +54,11 @@ The safety line is *structural*: layers 1–2 only ever have **read** tools, so 
               │  runs
               ▼
    cairn/  report ──► web/report.html          python -m cairn report
-           compute/ledger · act/* · watch/*    ledger · wheel · roll · trim · alerts
+           compute/* · act/* · watch/*         gains · premium · wheel · roll · trim · alerts
 ```
 
 - **Report** (`python -m cairn report`) pulls your live holdings read-only and renders the page — account value, unrealized P&L, concentration, and per-position cost basis & weight.
-- **Compute** holds the deterministic engines; today that's the intent **ledger** (`cairn/compute/ledger.py`): pool split, day-over-day, and options premium net of buy-to-closes. Realized LT/ST gains and wash-sale flags are the roadmap.
+- **Compute** holds the deterministic engines in `cairn/compute/`: a FIFO **lot** engine (realized LT/ST gains, holding periods, wash-sale flags), **positions** & concentration, **premium**, **cashflow** (deposits + dividends), and the intent **ledger** (pool split, day-over-day).
 - **Claude Code** reads the report, answers questions in plain language, and — only in Act mode — executes with your approval.
 
 ## Security
@@ -81,7 +81,7 @@ cairn/
 ├── cairn/
 │   ├── broker/mcp.py         # the MCP gate — write tools registered only when CAIRN_ACT_ENABLED=1
 │   ├── report/build.py       # builds web/report.html (the insights page)
-│   ├── compute/ledger.py     # intent ledger · day-over-day · premium split
+│   ├── compute/              # lots · realized · washsale · positions · premium · cashflow · ledger
 │   ├── ingest/statements.py  # monthly statement PDF → ACH cash-flow parse
 │   ├── act/                  # wheel · roll · reinvest · trim  (human-in-loop)
 │   └── watch/                # trim watcher · reminders (email alerts)
