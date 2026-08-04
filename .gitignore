@@ -1,0 +1,20 @@
+# secrets & session — NEVER commit
+.env
+*.pickle
+.tokens/
+~/.cairn/
+
+# your personal config & generated data
+config/ledger.json
+web/report.html
+daily-ledger.csv
+daily-ledger.md
+*-tracker.md
+.trim_alerted
+data/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.DS_Store

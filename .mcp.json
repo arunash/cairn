@@ -1,0 +1,12 @@
+{
+  "_comment": "Robinhood MCP for Cairn. READ tools are always available (get_portfolio, quotes, options, history). WRITE tools (buy/sell, options orders) are only registered when CAIRN_ACT_ENABLED=1 — so Insights & Chat physically cannot trade.",
+  "mcpServers": {
+    "robinhood": {
+      "command": "python",
+      "args": ["-m", "cairn.broker.mcp"],
+      "env": {
+        "CAIRN_ACT_ENABLED": "${CAIRN_ACT_ENABLED:-0}"
+      }
+    }
+  }
+}

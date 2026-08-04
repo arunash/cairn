@@ -1,0 +1,42 @@
+{
+  "_comment": "Intent-based pools — group your money by PURPOSE, not by account. Cairn tracks each pool separately even when they share one brokerage account, using account boundaries + this file. Copy to ledger.json (git-ignored) and fill in your real account IDs.",
+  "api": "http://localhost:5001/api/portfolio",
+  "shared_account": "MARGIN_ACCT",
+  "start_date": "2026-01-01",
+  "pools": {
+    "growth": {
+      "accounts": ["CASH_ACCT_1", "CASH_ACCT_2"],
+      "banks_static": 0,
+      "vehicle": "VOO",
+      "slice_of_shared": {
+        "_note": "Optional. Use only if this pool also owns part of the shared account. cash = dollars; positions = {ticker: shares}; vehicle_all = a ticker whose entire balance in the shared account belongs to this pool.",
+        "cash": 0,
+        "positions": {},
+        "vehicle_all": "VOO"
+      }
+    },
+    "preserve": {
+      "accounts": ["MARGIN_ACCT", "IRA_ACCT"],
+      "banks_static": 0,
+      "vehicle": "QQQ"
+    },
+    "dependent": {
+      "accounts": ["CUSTODIAL_ACCT"],
+      "banks_static": 0
+    }
+  },
+  "premium_split": {
+    "_note": "Option premium is split into two buckets. Orders whose id is listed count toward owner_pool; everything else goes to default_pool.",
+    "owner_pool": "growth",
+    "default_pool": "preserve",
+    "owner_order_ids": []
+  },
+  "rules": {
+    "leverage_cap_ratio": 0.5,
+    "no_fee_margin_only": true,
+    "premium_routing": { "growth": "VOO", "preserve": "QQQ" },
+    "earnings_clean": true,
+    "respect_wash_sale": true,
+    "never_sell": ["<ticker>"]
+  }
+}
