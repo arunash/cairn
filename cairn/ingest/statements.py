@@ -2,7 +2,7 @@
 """Best-effort per-account ACH deposit/withdrawal parse from monthly account statements.
 Set WINDOW_FROM/WINDOW_TO and fill SMAP with your own account numbers before running."""
 import warnings; warnings.filterwarnings("ignore")
-import robin_stocks.robinhood as rh, os, urllib.request, urllib.error, subprocess, re
+import robin_stocks.robinhood as rh, os, urllib.request, urllib.error, subprocess, re, tempfile, shutil
 from collections import defaultdict
 from dotenv import load_dotenv
 load_dotenv(".env")
@@ -32,10 +32,13 @@ AMT = re.compile(r"\$([\d,]+\.\d{2})")
 DATE = re.compile(r"(\d{2})/(\d{2})/(\d{4})")
 ACCT = re.compile(r"Account #:\s*(\d+)")
 
+# Statements are downloaded into a private 0700 temp dir (not shared /tmp) and removed after —
+# they contain account numbers and balances, so we don't leave them lying around.
+TMPDIR = tempfile.mkdtemp(prefix="cairn_stmt_")
 agg = defaultdict(lambda: defaultdict(lambda: {"in": 0.0, "out": 0.0}))
 for d in docs:
     ym = (d.get("date") or "")[:7]
-    p = f"/tmp/st_{ym}_{d['id'][:6]}.pdf"
+    p = os.path.join(TMPDIR, f"st_{ym}_{d['id'][:6]}.pdf")
     fetch(d.get("download_url") or d.get("url"), p)
     lines = subprocess.run(["pdftotext", "-layout", p, "-"], capture_output=True, text=True).stdout.splitlines()
     cur = None
@@ -66,3 +69,5 @@ for snum, name in SMAP.items():
         i, o = agg[snum][mo]["in"], agg[snum][mo]["out"]; ti += i; to += o
         print(f"{mo:9}{i:>12,.0f}{o:>12,.0f}{i-o:>12,.0f}")
     print(f"{'TOTAL':9}{ti:>12,.0f}{to:>12,.0f}{ti-to:>12,.0f}")
+
+shutil.rmtree(TMPDIR, ignore_errors=True)  # wipe the downloaded statement PDFs

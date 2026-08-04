@@ -23,6 +23,10 @@ MD_PATH  = os.path.join(ROOT, "config", "daily-ledger.md")
 
 
 def fetch_accounts(api):
+    # Only talk to a local loopback API or an explicit HTTPS endpoint — never file://,
+    # and never plain-HTTP to an arbitrary host (guards against a mis-set config causing SSRF).
+    if not (api.startswith(("http://localhost", "http://127.0.0.1")) or api.startswith("https://")):
+        raise ValueError(f"Refusing to fetch accounts from a non-local, non-HTTPS URL: {api}")
     with urllib.request.urlopen(api, timeout=90) as r:
         return json.load(r)["data"]["accounts"]
 
