@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
 """Cairn command line.  Usage:
 
-    python -m cairn report     # build web/report.html from your live account (read-only)
-    python -m cairn taxes      # print realized LT/ST gains, premium, and wash-sale flags
-    python -m cairn ledger     # update the intent-based pool ledger
+    python -m cairn report                 # build web/report.html from ALL your accounts (read-only)
+    python -m cairn report --account 1234  # limit to one account (match by any part of its number)
+    python -m cairn taxes                  # realized LT/ST gains, premium, wash-sale flags
+    python -m cairn ledger                 # update the intent-based pool ledger
 
 All read-only. Trading only ever happens through the Act-mode MCP tools, with approval.
 """
 import sys
+
+
+def _flag(args, name):
+    if name in args:
+        i = args.index(name)
+        if i + 1 < len(args):
+            return args[i + 1]
+    return None
 
 
 def _taxes():
@@ -31,7 +40,12 @@ def _taxes():
 
 
 def main():
-    cmd = (sys.argv[1] if len(sys.argv) > 1 else "report").lower()
+    args = sys.argv[1:]
+    cmd = next((a for a in args if not a.startswith("-")), "report").lower()
+    acct = _flag(args, "--account")
+    if acct:
+        from cairn.compute import base
+        base.set_account_filter(acct)
     if cmd == "report":
         from cairn.report.build import build
         build()

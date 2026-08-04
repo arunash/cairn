@@ -15,6 +15,7 @@ This is bookkeeping to help you see your position — it is NOT tax advice.
 import datetime
 from collections import defaultdict, deque
 from cairn.compute.base import symbol_for, stock_orders
+from cairn.compute.splits import adjust as split_adjust
 
 _cache = {}
 
@@ -45,6 +46,7 @@ def exec_events():
             if qty <= 0:
                 continue
             date = ex.get("settlement_date") or (o.get("last_transaction_at") or "")[:10]
+            qty, price = split_adjust(sym, date, qty, price)   # restate pre-split lots to current shares
             ev.append({"date": date, "sym": sym, "side": side, "qty": qty, "price": price})
     ev.sort(key=lambda e: e["date"])
     _cache["ev"] = ev

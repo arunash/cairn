@@ -28,7 +28,7 @@ You need nothing but a Robinhood login for the report. For the chat you need [Cl
 
 > **Where does it open?** `web/report.html` is a plain file on your machine — `open` it and it loads from a `file://` path in your browser. There is no hosted portal and no server.
 
-> **Status — built in the open.** The report is a full read of your account: value, cash, net contributed, every position with cost basis / unrealized P&L / holding period (LT vs ST), concentration (Herfindahl index), realized long- and short-term gains, options premium, dividends, and wash-sale candidates. All read-only and reconstructed from your own order history (`python -m cairn taxes` prints the tax view). Issues and PRs welcome.
+> **Status — built in the open.** The report spans **all your accounts** and is a full read: value, cash, every position with cost basis / unrealized P&L / holding period (LT vs ST), concentration (Herfindahl index), realized long- and short-term gains, options premium, dividends, and wash-sale candidates. Cost basis comes straight from Robinhood (already split- and transfer-adjusted); realized gains use a small **bundled, local** split table — no network. `python -m cairn taxes` prints the tax view, and `--account <id>` limits any command to one account. Read-only throughout. Issues and PRs welcome.
 
 ---
 

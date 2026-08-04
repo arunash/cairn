@@ -80,7 +80,7 @@ def _render(d):
     acct_html = ""
     if len(accts) > 1:
         chips = " · ".join(
-            f"…{(a.get('number') or '')[-4:]} <span style='color:var(--faint)'>{html.escape(a.get('type') or '')}</span> "
+            f"…{html.escape((a.get('number') or '')[-4:])} <span style='color:var(--faint)'>{html.escape(a.get('type') or '')}</span> "
             f"{_money(a.get('equity', 0) + a.get('cash', 0))}" for a in accts)
         acct_html = f"<div class='band'>Across <b>{len(accts)} accounts</b> — {chips}</div>"
 
