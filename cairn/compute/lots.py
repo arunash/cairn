@@ -13,9 +13,8 @@ Assumptions & limits (read before trusting the numbers):
 This is bookkeeping to help you see your position — it is NOT tax advice.
 """
 import datetime
-import robin_stocks.robinhood as rh
 from collections import defaultdict, deque
-from cairn.compute.base import login, symbol_for
+from cairn.compute.base import symbol_for, stock_orders
 
 _cache = {}
 
@@ -31,8 +30,7 @@ def exec_events():
     """All filled stock buy/sell executions as dicts (date, sym, side, qty, price), chronological."""
     if "ev" in _cache:
         return _cache["ev"]
-    login()
-    orders = rh.orders.get_all_stock_orders() or []
+    orders = stock_orders()
     ev = []
     for o in orders:
         if o.get("state") != "filled":

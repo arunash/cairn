@@ -18,7 +18,7 @@ import datetime
 import robin_stocks.robinhood as rh
 
 from cairn.compute.base import login, ROOT
-from cairn.compute import positions, realized, washsale, premium, cashflow
+from cairn.compute import base, positions, realized, washsale, premium, cashflow
 
 OUT = os.path.join(ROOT, "web", "report.html")
 
@@ -50,7 +50,8 @@ def _collect():
         "realized": _try(realized.summary),
         "premium": _try(premium.summary),
         "cashflow": _try(cashflow.summary),
-        "wash": _try(washsale.flags, []),
+        "wash": _try(washsale.summary),
+        "incomplete": base.LOAD_INCOMPLETE,
         "ts": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "year": datetime.date.today().year,
     }
@@ -95,8 +96,16 @@ def _render(d):
         "<td>{eq}</td><td class='{cls}'>{pl} ({plp:+.0f}%)</td><td class='term'>{term}</td><td>{w:.1f}%</td></tr>".format(
             sym=html.escape(r["sym"]), qty=round(r["qty"], 4), price=_money(r["price"]), basis=_money(r["basis"]),
             eq=_money(r["equity"]), cls=("up" if r["pl"] >= 0 else "dn"), pl=_signed(r["pl"]),
-            plp=r["plpct"], term=html.escape(str(r.get("term", "—"))), w=r["weight"])
+            plp=r["plpct"], term=html.escape(str(r.get("term", "—"))) + ("" if r.get("recon_ok", True) else " ≈"),
+            w=r["weight"])
         for r in rows) or "<tr><td colspan='8' style='color:var(--faint)'>No stock positions.</td></tr>"
+    recon_bad = [r["sym"] for r in rows if not r.get("recon_ok", True)]
+    recon_html = ""
+    if recon_bad:
+        recon_html = (f"<div class='sub' style='margin-top:8px'>≈ {len(recon_bad)} position(s) "
+                      f"({html.escape(', '.join(recon_bad))}) have lot history that doesn't reconcile to Robinhood's "
+                      f"current share count — usually a stock split, transfer-in, or DRIP. Their <b>value &amp; unrealized "
+                      f"P&amp;L are exact</b> (straight from Robinhood); the reconstructed cost basis &amp; holding period are approximate.</div>")
 
     # realized / income strip
     strip = []
@@ -109,13 +118,20 @@ def _render(d):
         strip.append(_card(f"Dividends · {d['year']}", _money(cf['dividends_ytd'])))
     strip_html = f"<div class='top'>{''.join(strip)}</div>" if strip else ""
 
+    warn_html = ""
+    if d.get("incomplete"):
+        warn_html = ("<div class='band crit'><b>⚠ Order history incomplete</b> — some pages of your "
+                     "trade history didn't load, so realized gains and holding periods may be partial. Re-run to retry.</div>")
+
     wash_html = ""
-    if wash:
+    if wash and wash["count"]:
         items = "".join(
-            f"<li><b>{html.escape(w['sym'])}</b> — loss {_signed(w['loss'])} sold {w['sold']}, "
-            f"repurchased {', '.join(w['replaced_on'])}</li>" for w in wash)
-        wash_html = (f"<div class='band crit'><b>⚠ Wash-sale candidates to review ({len(wash)})</b>"
-                     f"<ul>{items}</ul><span class='fine'>A screen, not a determination — confirm on your 1099-B.</span></div>")
+            f"<li><b>{html.escape(w['sym'])}</b> — {w['count']} lot(s), {_signed(w['loss'])} potentially disallowed</li>"
+            for w in wash["by_symbol"])
+        wash_html = (f"<div class='band crit'><b>⚠ Wash-sale candidates — {wash['count']} lots, "
+                     f"{_signed(wash['total_loss'])} total</b><ul>{items}</ul>"
+                     f"<span class='fine'>Usually weekly ETF reinvestment: the loss shifts to the replacement shares' "
+                     f"basis, it isn't lost. A screen, not a determination — confirm on your 1099-B.</span></div>")
 
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -149,6 +165,7 @@ def _render(d):
   <h1>Your portfolio, on one page</h1>
   <div class="sub">Generated {d['ts']} · read-only · local file — nothing was uploaded</div>
   <div class="top">{top}</div>
+  {warn_html}
   {conc_html}
   {wash_html}
   <h2>Positions</h2>
@@ -156,6 +173,7 @@ def _render(d):
     <tr><th>Symbol</th><th>Qty</th><th>Price</th><th>Cost basis</th><th>Value</th><th>Unrealized</th><th>Held</th><th>Weight</th></tr>
     {trs}
   </table>
+  {recon_html}
   <h2>Realized &amp; income</h2>
   {strip_html or "<div class='sub'>No realized activity yet this year.</div>"}
   <footer>

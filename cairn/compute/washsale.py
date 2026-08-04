@@ -37,3 +37,18 @@ def flags(year=None):
                 "loss": r["gain"], "replaced_on": replaced,
             })
     return out
+
+
+def summary(year=None):
+    """Aggregate the raw flags by symbol — count of flagged lots + total loss potentially
+    disallowed. A repurchase within 30 days of a loss sale (e.g. weekly ETF reinvestment)
+    triggers this; the losses are added to the replacement shares' basis, not lost."""
+    fl = flags(year)
+    agg = {}
+    for f in fl:
+        a = agg.setdefault(f["sym"], {"count": 0, "loss": 0.0})
+        a["count"] += 1
+        a["loss"] += f["loss"]
+    rows = [{"sym": k, "count": v["count"], "loss": round(v["loss"], 2)} for k, v in agg.items()]
+    rows.sort(key=lambda r: r["loss"])  # most negative first
+    return {"count": len(fl), "total_loss": round(sum(f["loss"] for f in fl), 2), "by_symbol": rows}

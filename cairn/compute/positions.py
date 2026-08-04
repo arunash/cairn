@@ -44,6 +44,9 @@ def holdings():
             r["term"] = "ST"
         else:
             r["term"] = f"{lt / t * 100:.0f}% LT"
+        # reconciliation: does the reconstructed lot quantity match Robinhood's current share count?
+        # a mismatch means a split / transfer-in / DRIP the FIFO engine can't see → basis is approximate.
+        r["recon_ok"] = (t > 0 and abs(t - r["qty"]) <= max(0.02 * r["qty"], 0.01))
     return rows, total
 
 

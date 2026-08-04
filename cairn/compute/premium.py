@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """Options premium collected — net credits minus buy-to-close debits — all-time, this year, per symbol."""
 import datetime
-import robin_stocks.robinhood as rh
-from cairn.compute.base import login
+from cairn.compute.base import option_orders
 
 
 def summary(year=None):
-    login()
     year = year or datetime.date.today().year
     total = ytd = 0.0
     by_symbol = {}
-    for o in (rh.orders.get_all_option_orders() or []):
+    for o in option_orders():
         if o.get("state") != "filled":
             continue
         prem = float(o.get("processed_premium") or 0)
