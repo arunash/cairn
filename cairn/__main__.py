@@ -3,6 +3,7 @@
 
     python -m cairn report                 # build web/report.html from ALL your accounts (read-only)
     python -m cairn report --account 1234  # limit to one account (match by any part of its number)
+    python -m cairn serve                  # build the report and serve it at http://localhost:8787
     python -m cairn taxes                  # realized LT/ST gains, premium, wash-sale flags
     python -m cairn ledger                 # update the intent-based pool ledger
 
@@ -39,6 +40,34 @@ def _taxes():
         print("\n⚠ order history incomplete — figures may be partial; re-run to retry.")
 
 
+def _serve(port):
+    """Build the report, then serve web/ on localhost only and open the browser."""
+    import os
+    import functools
+    import socketserver
+    import webbrowser
+    from http.server import SimpleHTTPRequestHandler
+    from cairn.report.build import build, OUT
+
+    build()
+    web_dir = os.path.dirname(OUT)
+    handler = functools.partial(SimpleHTTPRequestHandler, directory=web_dir)
+    socketserver.TCPServer.allow_reuse_address = True
+    url = f"http://localhost:{port}/report.html"
+    # bind to loopback only — this is your financial data; never expose it on the network
+    with socketserver.TCPServer(("127.0.0.1", port), handler) as httpd:
+        print(f"\nCairn portal  →  {url}")
+        print("Serving on localhost only · Ctrl-C to stop")
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\nstopped.")
+
+
 def main():
     args = sys.argv[1:]
     cmd = next((a for a in args if not a.startswith("-")), "report").lower()
@@ -49,13 +78,16 @@ def main():
     if cmd == "report":
         from cairn.report.build import build
         build()
+    elif cmd == "serve":
+        p = _flag(args, "--port")
+        _serve(int(p) if p and p.isdigit() else 8787)
     elif cmd == "taxes":
         _taxes()
     elif cmd == "ledger":
         from cairn.compute.ledger import main as ledger_main
         ledger_main()
     else:
-        print(f"unknown command: {cmd}\nusage: python -m cairn [report|taxes|ledger]", file=sys.stderr)
+        print(f"unknown command: {cmd}\nusage: python -m cairn [report|serve|taxes|ledger]", file=sys.stderr)
         sys.exit(2)
 
 
